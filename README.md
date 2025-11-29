@@ -168,12 +168,3 @@ Reduce costos en ejecución y hace el código más legible.
 
 Código más limpio y consistente.
 
----
-
-Si querés puedo agregar:
-🎨 Un **README totalmente estilizado con colores HTML**, banners y badges
-📊 Diagramas visuales de **arquitectura**, **CEI**, **flujo de conversión**, etc.
-📦 Una **estructura profesional de repo (Foundry / Hardhat)**
-📘 Una **documentación NatSpec completa autogenerada**
-
-Solo decime y lo agrego. 💬🔥
