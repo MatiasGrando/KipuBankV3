@@ -151,14 +151,27 @@ contract  KipuBankV3 is Ownable {
                                 CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    /** @notice Initializes the contract with configuration parameters and sets price feed references.
-     * @dev Sets the maximum withdrawal per transaction, the total bank cap, the USDC token address,
-     * and initializes Chainlink price feed oracles for USDC and ETH.
-     * @param _maxWithdraftPerTransaction The maximum withdrawal amount allowed per transaction (in token units).
-     * @param _maxCapBank The maximum total balance the bank can hold (in token units).
-     * @param _USDC The address of the USDC ERC20 token contract.
-     * @param _initialOwner The address that will be assigned as the initial contract owner.
-    */
+    /**
+     * @title KipuBank Constructor
+     * @notice Initializes the contract configuration, sets system limits, assigns the owner,
+     *         defines the USDC token, and registers Chainlink price feeds for supported assets.
+     *
+     * @dev
+     * - Sets maximum withdrawable amount per transaction.
+     * - Sets the global cap for total funds stored in the bank.
+     * - Registers Chainlink price feeds for:
+     *      • USDC  (token price feed)
+     *      • ETH   (used for estimating the value of raw ETH deposits when needed)
+     * - Optionally initializes the Uniswap Wrapper module if provided.
+     * - Price feeds can be updated later using `setPriceFeed`.
+     *
+     * @param _maxWithdrawalPerTransaction Maximum amount a user can withdraw in a single transaction (USDC units).
+     * @param _maxCapBank Maximum total amount of USDC the bank can hold.
+     * @param _USDC Address of the USDC ERC20 token contract. It must be the same one used by the wrapper.
+     * @param _initialOwner Address that will be assigned as the contract's initial owner.
+     * @param _wrapper Address of the UniswapV2 Wrapper contract.
+     *                 Can be `address(0)` if the wrapper will be set later via an admin function.
+     */
     constructor(
          uint256 _maxWithdraftPerTransaction, 
          uint256 _maxCapBank, 
