@@ -9,6 +9,9 @@ Bienvenido a la versión **v3.0** de **KipuBank**, una evolución completa orien
 > 📘 **Nota Didáctica:** Gran parte del código de la **versión v2** se mantiene en el repositorio para facilitar el estudio comparativo de mejoras, patrones y correcciones aplicadas. Ese código queda **inutilizado** en v3.
 > En **KipuBank v3.1** se eliminarán completamente para obtener un código aún más limpio.
 
+> 📘 **Nota:** El contrato de desplego en remix para validarlo por lo que cuenta con unas pequeñas diferencias en codigo como pero sin limitarme en la importacion de librerias ".src/..." a "src/..." para que se pueda ejecutar correctamente en foundry
+> Como tambien modificaciones menores mencionadas en el readme las cuales no afectan la funcionalidad del programa.
+
 ### ✨ Cambios principales
 
 🔹 Implementación de **UniswapV2** mediante un contrato **Wrapper** para intercambiar tokens → USDC (solo pares directos).
