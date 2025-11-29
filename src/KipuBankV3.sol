@@ -2,7 +2,7 @@
 pragma solidity >0.8.28;
 
 /**
- * @title KipuBankV2
+ * @title KipuBankV3
  * @author Matias Grando
  * @notice This contract implements a simple decentralized bank that supports ETH and USDC deposits/withdrawals.
  * @dev Developed as part of the Ethereum Developer program at EthKipu.
@@ -14,7 +14,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interf
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IWrapper} from "/IWrapper.sol";
 
-contract  KipuBankV2 is Ownable {
+contract  KipuBankV3 is Ownable {
 
 
     /*//////////////////////////////////////////////////////////////
@@ -31,6 +31,7 @@ contract  KipuBankV2 is Ownable {
     IERC20 immutable USDC;
 
     /// @notice Constant used for ETH/USD price conversion (1e18 wei * 1e8 oracle decimals = 1e20 total scale).
+    /// USDC has decimals 6
     uint256 constant DECIMAL_ETHUSD = 1 * 10 ** 20;
 
     ///@notice variable to record the deposit count
@@ -74,6 +75,11 @@ contract  KipuBankV2 is Ownable {
      * @param token is The address of the new token with newPriceFeed that is your newly registered oracle.
      */
     event NewPriceFeed(address token, address newPriceFeed);
+
+    /// @notice Emitted when the wrapper address is updated.
+    /// @param oldWrapper The previous wrapper address.
+    /// @param newWrapper The newly set wrapper address.
+    event WrapperUpdated(address indexed oldWrapper, address indexed newWrapper);
 
     /**
      * @notice Emitted when a user withdraws ETH or tokens from the contract.
@@ -133,7 +139,12 @@ contract  KipuBankV2 is Ownable {
      */
     error WithoutSufficientBalance(uint256 amount, uint256 balance);
 
+    /// @notice Thrown when an address parameter expected to be non-zero is zero.
+    /// @dev This error is used to prevent unintended behavior caused by using the zero address.
     error ZeroAddress();
+
+    /// @notice Thrown when a function is called with an amount value equal to zero.
+    /// @dev This error ensures meaningful token transfers and prevents unnecessary execution.
     error ZeroAmount();
 
     /*//////////////////////////////////////////////////////////////
@@ -181,7 +192,7 @@ contract  KipuBankV2 is Ownable {
      * @param _amount The amount of ETH or tokens being deposited.
      */
     modifier maxCapBank(uint256 _amount, address _token,uint8 _tokenDecimals) {
-        if ((getContractBalance() + tokenAmountInUSD(_token, _amount, _tokenDecimals)) > MAX_CAP_BANK) {
+        if ((getContractBalance() + tokenAmountInUSD(_token, _amount)) > MAX_CAP_BANK) {
             revert MaxCapBankExceeded(
                 _amount, 
                 address(this).balance, 
@@ -199,7 +210,7 @@ contract  KipuBankV2 is Ownable {
     modifier maxWithdraw(uint256 amount, address tokenAddress, uint8 tokenDecimals) {
         //uint8 tokenDecimals = 8;
        // if(tokenAddress == address(0)){tokenDecimals = 20;}
-        if (tokenAmountInUSD (tokenAddress, amount, tokenDecimals)> MAX_WITHDRAFT_PER_TRANSACTION) {
+        if (tokenAmountInUSD (tokenAddress, amount)> MAX_WITHDRAFT_PER_TRANSACTION) {
             revert MaxWithdrawPerTransaction(
                 amount, 
                 msg.sender
@@ -224,38 +235,6 @@ contract  KipuBankV2 is Ownable {
     /*//////////////////////////////////////////////////////////////
                                 DEPOSITS
     //////////////////////////////////////////////////////////////*/
-
-     /**
-     * @notice Fallback function that accepts ETH deposits sent via a low-level call or incorrect function selector.
-     * @dev 
-     * - Applies the {maxCapBank} modifier to ensure the bank cap is not exceeded.
-     * - Increments the user's ETH balance under `userTokenBalance[msg.sender][address(0)]`.
-     * - Calls the internal `_registerOfDeposit()` function for accounting or tracking.
-     * - Emits a {Deposit} event upon success.
-     */
-    fallback() external payable maxCapBank(msg.value, address(0),20) { 
-        unchecked {
-            userTokenBalance[msg.sender][address(0)] += msg.value;
-        }
-         _registerOfDeposit();
-         emit DepositToken(msg.sender, address(0), msg.value);
-    }
-
-    /**
-     * @notice Receives plain ETH transfers sent directly to the contract.
-     * @dev 
-     * - Triggered automatically when no data is sent in the transaction.
-     * - Applies the {maxCapBank} modifier to prevent exceeding the bank cap.
-     * - Updates the user's ETH balance and registers the deposit.
-     * - Emits a {Deposit} event.
-     */
-    receive() external payable maxCapBank(msg.value, address(0),20) {
-        unchecked {
-             userTokenBalance[msg.sender][address(0)] += msg.value;
-        }
-         _registerOfDeposit();
-         emit DepositToken(msg.sender, address(0), msg.value);
-    }
 
     /**
      * @notice Allows users to deposit ETH manually via a direct function call.
@@ -304,7 +283,6 @@ contract  KipuBankV2 is Ownable {
     function depositTokenAndConvert(
         address token,
         uint256 amount,
-        uint8 tokenDecimals,
         uint256 amountOutMin
     ) external {
         if (token == address(0)) revert ZeroAddress();
@@ -315,9 +293,9 @@ contract  KipuBankV2 is Ownable {
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
 
 
-        // Check bank cap using estimated USDC (USDC has decimals 6 typically, but getContractBalance uses USDC.balanceOf directly)
+        // Check bank cap using estimated USDC (USDC has decimals 6)
         // We'll treat tokenAmountInUSD with USDC decimals(6) since estimatedUSDC is in USDC token units.
-        if ((getContractBalance() + tokenAmountInUSD(token, amount, tokenDecimals)) > MAX_CAP_BANK) {
+        if ((getContractBalance() + tokenAmountInUSD(token, amount)) > MAX_CAP_BANK) {
             // revert and return tokens to user (safer to revert and not attempt swap)
             revert MaxCapBankExceeded(amount, address(this).balance, msg.sender);
         }
@@ -370,6 +348,24 @@ contract  KipuBankV2 is Ownable {
              IERC20(_tokenAddress).transfer(msg.sender, _tokenAmount);   
         }
     }
+
+    /*//////////////////////////////////////////////////////////////
+                                FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Updates the wrapper contract address used for token-to-USDC conversions.
+     * @dev Only callable by the owner.
+     *      Wrapper cannot be set to address(0).
+     * @param _newWrapper The address of the new wrapper contract.
+     */
+    function setWrapper(address _newWrapper) external onlyOwner {
+        if (_newWrapper == address(0)) revert ZeroAddress();
+        address old = address(wrapper);
+        wrapper = IWrapper(_newWrapper);
+        emit WrapperUpdated(old, _newWrapper);
+    }
+
     /**
      * @notice Sets a new Chainlink price feed for a specific token.
      * @dev Only the contract owner can call this function.
@@ -385,10 +381,6 @@ contract  KipuBankV2 is Ownable {
      * 
      * Emits a {NewPriceFeed} event.
      */
-
-    /*//////////////////////////////////////////////////////////////
-                                FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
 
     
     function setPriceFeed(address token, address feed) external onlyOwner {
@@ -462,19 +454,18 @@ contract  KipuBankV2 is Ownable {
 
     /**
      * @notice Converts a given token amount to its USD value using the Chainlink price feed.
-     * @dev Calculates: `usdValue = amount * price / (10 ** tokenDecimals)`.
+     * @dev Calculates: `usdValue = amount * price `.
      *      Price is obtained from the feed associated with the token.
      *      Ensure that MAX_WITHDRAFT_PER_TRANSACTION uses the same decimal scale as the usdValue.
      * @param token The address of the ERC20 token (or address(0) for ETH).
      * @param amount The amount of tokens to convert.
-     * @param tokenDecimals The number of decimals of the token (usually 18 for ETH, 6 for USDC/USDT).
      * @return usdValue The value of the token amount in USD, scaled according to the feed's decimals.
      */
-    function tokenAmountInUSD(address token, uint256 amount, uint8 tokenDecimals) internal view returns (uint256) {
+    function tokenAmountInUSD(address token, uint256 amount) internal view returns (uint256) {
          //uint256 price = getTokenPriceUSD(token); 
          //uint256 usdValue = (amount * price) / (10 ** tokenDecimals); 
          uint256 estimatedUSDC = wrapper.previewSwapToUsdc(token, amount);
-         uint256 usdValue = estimatedUSDC / (10 ** tokenDecimals); 
+         uint256 usdValue = estimatedUSDC; 
          return usdValue;
     }
 
@@ -502,7 +493,6 @@ contract  KipuBankV2 is Ownable {
     */
 
     function getContractBalance ()  public view returns (uint256 _balance) {
-         return (convertETHinUSD(address(this).balance)+USDC.balanceOf(address(this)));
-    //If more coins are added, the token addr values ​​could be stored in a list and then converted and summed.   
+         return (convertETHinUSD(address(this).balance)+USDC.balanceOf(address(this)));  
     }
 }
