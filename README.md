@@ -1,6 +1,4 @@
-# README del Proyecto
-
-KIPU-BANK-V3
+# KIPU-BANK-V3
 
 ## Mejoras de Versión (v2 → v3)
 
