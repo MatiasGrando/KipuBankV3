@@ -171,3 +171,7 @@ Reduce costos en ejecución y hace el código más legible.
 
 Código más limpio y consistente.
 
+
+<img width="851" height="372" alt="image" src="https://github.com/user-attachments/assets/774c20a4-ce4f-40fe-a140-a0117d624b2b" />
+
+
