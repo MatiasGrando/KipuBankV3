@@ -73,6 +73,7 @@ contract  KipuBankV3 is Ownable {
      /**
      * @notice Emitted when a new price feed address is set in the contract.
      * @param token is The address of the new token with newPriceFeed that is your newly registered oracle.
+     * @param newPriceFeed The address of the new AggregatorV3Interface contract that provides the USD price for the token.
      */
     event NewPriceFeed(address token, address newPriceFeed);
 
@@ -158,6 +159,7 @@ contract  KipuBankV3 is Ownable {
      * @param _maxCapBank The maximum total balance the bank can hold (in token units).
      * @param _USDC The address of the USDC ERC20 token contract.
      * @param _initialOwner The address that will be assigned as the initial contract owner.
+     *@param _wrapper Initial wrapper address for token-to-USDC conversions (can be address(0)).
     */
     constructor(
          uint256 _maxWithdraftPerTransaction, 
@@ -189,7 +191,9 @@ contract  KipuBankV3 is Ownable {
      /**
      * @dev Ensures that the new deposit does not exceed the maximum allowed bank cap.
      * Reverts with {MaxCapBank} if the total balance after the deposit would exceed `MAX_CAP_BANK`.
-     * @param _amount The amount of ETH or tokens being deposited.
+     * @param _amount Amount of tokens or ETH to deposit.
+     * @param _token Token address or address(0) for ETH.
+     * @param _tokenDecimals Decimals of the token for conversion purposes.
      */
     modifier maxCapBank(uint256 _amount, address _token,uint8 _tokenDecimals) {
         if ((getContractBalance() + tokenAmountInUSD(_token, _amount)) > MAX_CAP_BANK) {
@@ -202,10 +206,12 @@ contract  KipuBankV3 is Ownable {
         _;
     }
 
-    /**
+     /*
      * @dev Ensures that the withdrawal amount does not exceed the per-transaction limit.
      * Reverts with {MaxWithdrawPerTransaction} if `amount` is greater than `MAX_WITHDRAFT_PER_TRANSACTION`.
      * @param amount The requested withdrawal amount.
+     * @param _token Token address or address(0) for ETH.
+     * @param _tokenDecimals Decimals of the token for conversion purposes.
      */
     modifier maxWithdraw(uint256 amount, address tokenAddress, uint8 tokenDecimals) {
         //uint8 tokenDecimals = 8;
@@ -219,10 +225,12 @@ contract  KipuBankV3 is Ownable {
         _;
     }
 
-    /**
+     /*
      * @dev Ensures that the user has sufficient balance to perform a withdrawal.
      * Reverts with {WithoutSufficientBalance} if `amount` exceeds the user's available balance.
      * @param amount The requested withdrawal amount.
+     * @param _token Token address or address(0) for ETH.
+     * @param _tokenDecimals Decimals of the token for conversion purposes.
      */
     modifier withoutSufficientBalance(uint256 amount,address _tokenAddress) {
          uint256 balance = userTokenBalance[msg.sender][_tokenAddress];
@@ -257,6 +265,7 @@ contract  KipuBankV3 is Ownable {
      * @dev Uses `transferFrom`, so the user must have approved this contract beforehand.
      * @param _tokenAmount The number of tokens to deposit.
      * @param _tokenAddress The ERC20 token contract address.
+     *@param decimals Number of decimals of the token (ERC20 standard) for USD conversion.
      */
     function depositToken(
          uint256 _tokenAmount, 
@@ -279,15 +288,20 @@ contract  KipuBankV3 is Ownable {
      * Requirements:
      * - `wrapper` must be set (non-zero).
      * - user must have approved this contract for `amount` of `token`.
+     *@param amountOutMin Minimum amount of USDC expected from the swap.
+     *@param amount Amount of token.
+     *@param token Address of token.
      */
     function depositTokenAndConvert(
         address token,
         uint256 amount,
         uint256 amountOutMin
     ) external {
+        IERC20 _USDC = USDC;
+        address _wrapper = address(wrapper);
         if (token == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
-        if (address(wrapper) == address(0)) revert ZeroAddress();
+        if (_wrapper == address(0)) revert ZeroAddress();
 
         // 1) pull token from user
         SafeERC20.safeTransferFrom(IERC20(token), msg.sender, address(this), amount);
@@ -302,18 +316,18 @@ contract  KipuBankV3 is Ownable {
 
         // 2) approve wrapper to pull tokens from this contract
         // Reset allowance to 0 then set to amount (SafeERC20 recommended pattern)
-        IERC20(token).approve(address(wrapper), amount);
+        IERC20(token).approve(_wrapper, amount);
 
         // 3) perform swap: recipient is this contract so we receive USDC here
-        uint256 receivedUSDC = wrapper.swapToUsdc(token, amount, amountOutMin, address(this));
+        uint256 receivedUSDC = IWrapper(_wrapper).swapToUsdc(token, amount, amountOutMin, address(this));
         if (receivedUSDC == 0) revert ZeroAmount();
 
         // 4) credit user's USDC internal balance
-        userTokenBalance[msg.sender][address(USDC)] += receivedUSDC;
+        userTokenBalance[msg.sender][address(_USDC)] += receivedUSDC;
 
         // bookkeeping
         _registerOfDeposit();
-        emit DepositToken(msg.sender, address(USDC), receivedUSDC);
+        emit DepositToken(msg.sender, address(_USDC), receivedUSDC);
     }
     
     /*//////////////////////////////////////////////////////////////
@@ -326,6 +340,7 @@ contract  KipuBankV3 is Ownable {
      * @dev If `_tokenAddress` is address(0), it sends ETH instead of ERC20 tokens.
      * @param _tokenAmount The number of tokens or ETH to withdraw.
      * @param _tokenAddress The ERC20 token address or address(0) for ETH.
+     * @param tokenDecimals Number of decimals of the token for USD conversion when checking limits.
      */
          function withdrafToken(
          uint256 _tokenAmount, 
@@ -360,6 +375,7 @@ contract  KipuBankV3 is Ownable {
      * @param _newWrapper The address of the new wrapper contract.
      */
     function setWrapper(address _newWrapper) external onlyOwner {
+
         if (_newWrapper == address(0)) revert ZeroAddress();
         address old = address(wrapper);
         wrapper = IWrapper(_newWrapper);
@@ -493,6 +509,7 @@ contract  KipuBankV3 is Ownable {
     */
 
     function getContractBalance ()  public view returns (uint256 _balance) {
-         return (convertETHinUSD(address(this).balance)+USDC.balanceOf(address(this)));  
+         IERC20 _USDC = USDC;
+         return (convertETHinUSD(address(this).balance)+_USDC.balanceOf(address(this)));  
     }
 }
