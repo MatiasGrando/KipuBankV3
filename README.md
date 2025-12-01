@@ -177,4 +177,23 @@ Código más limpio y consistente.
 
 <img width="851" height="372" alt="image" src="https://github.com/user-attachments/assets/774c20a4-ce4f-40fe-a140-a0117d624b2b" />
 
+---
+
+#  **REQUISITOS DE LANZAMIENTO**
+
+1- Tener levantado anvil con un fork en la red "https://zetachain-evm.blockpi.network/v1/rpc/public";
+2- Tener las direcciones que figuran en el .env
+3- Asegurarce que la direccion WHALE tenga fondos
+4- La dirrecion MAT es la del User, modificarla por la billetera que se quiera utilizar
+
+#  **PUNTOS DEBILES**
+
+El contrato depende del Wrapper, si este cae el contrato pierde gran parte de sus funcionalidades
+
+Hay que implementar mas Test para llegar sobre el 90%
+
+Implementar correctamente en todas las funciones SafeERC20
+
+Limpiar codigo de la V2 (la cual se dejo para las correcciones)
+
 
