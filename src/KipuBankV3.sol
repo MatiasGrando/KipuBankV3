@@ -316,6 +316,7 @@ contract  KipuBankV3 is Ownable {
 
         // 2) approve wrapper to pull tokens from this contract
         // Reset allowance to 0 then set to amount (SafeERC20 recommended pattern)
+        IERC20(token).approve(_wrapper, 0);
         IERC20(token).approve(_wrapper, amount);
 
         // 3) perform swap: recipient is this contract so we receive USDC here
@@ -513,3 +514,4 @@ contract  KipuBankV3 is Ownable {
          return (convertETHinUSD(address(this).balance)+_USDC.balanceOf(address(this)));  
     }
 }
+
